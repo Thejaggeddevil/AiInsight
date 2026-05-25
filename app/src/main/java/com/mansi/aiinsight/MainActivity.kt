@@ -30,6 +30,8 @@ class MainActivity : ComponentActivity() {
         val certificateRepository = CertificateRepository(this)
         val progressRepository = ProgressRepository(this)
         val paymentRepository = PaymentRepository(this)
+        val moduleRepository = ModuleRepository(this)
+        val lessonRepository = LessonRepository(this)
 
         setContent {
 
@@ -96,23 +98,25 @@ class MainActivity : ComponentActivity() {
 
                         // FIXED COURSE LEARNING ROUTE
                         composable(
-                            "courseLearning/{level}"
+                            "courseLearning/{courseLevel}/{courseId}"
                         ) { backStackEntry ->
 
-                            val level =
+                            val courseLevel =
                                 backStackEntry.arguments
-                                    ?.getString("level")
+                                    ?.getString("courseLevel")
                                     ?: "beginner"
 
+                            val courseId =
+                                backStackEntry.arguments
+                                    ?.getString("courseId")
+                                    ?.toIntOrNull()
+                                    ?: 0
+
                             LearningModuleScreen(
-                                navController =
-                                    navController,
-
-                                progressRepository =
-                                    progressRepository,
-
-                                level =
-                                    level
+                                navController = navController,
+                                moduleRepository = moduleRepository,
+                                courseLevel = courseLevel,
+                                courseId = courseId
                             )
                         }
 
@@ -135,34 +139,36 @@ class MainActivity : ComponentActivity() {
 
                         // Lesson
                         composable(
-                            "lesson/{moduleIndex}"
+                            "lesson/{lessonId}"
                         ) { backStackEntry ->
 
-                            val moduleIndex =
+                            val lessonId =
                                 backStackEntry.arguments
-                                    ?.getString("moduleIndex")
+                                    ?.getString("lessonId")
                                     ?.toIntOrNull()
                                     ?: 0
 
                             LessonScreen(
-                                navController,
-                                moduleIndex
+                                navController = navController,
+                                lessonId = lessonId,
+                                lessonRepository = lessonRepository,
+                                progressRepository = progressRepository
                             )
                         }
 
                         // Payment
                         composable(
-                            "payment/{courseName}"
+                            "payment/{courseId}"
                         ) { backStackEntry ->
 
-                            val courseName =
+                            val courseId =
                                 backStackEntry.arguments
-                                    ?.getString("courseName")
+                                    ?.getString("courseId")
                                     ?: ""
 
                             PaymentScreen(
                                 navController,
-                                courseName,
+                                courseId,
                                 paymentRepository,
                                 authRepository
                             )

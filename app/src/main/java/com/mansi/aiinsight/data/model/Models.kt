@@ -76,10 +76,33 @@ data class CoursesResponse(
     @SerializedName("courses") val courses: List<Course>
 )
 
+// FIXED: Added id, description, level fields with proper types
 data class Course(
+    @SerializedName("id") val id: Int = 0,
     @SerializedName("name") val name: String,
-    @SerializedName("amount") val amount: String,
+    @SerializedName("description") val description: String = "",
+    @SerializedName("level") val level: String = "beginner",
+    @SerializedName("amount") val amount: Int = 0,
     @SerializedName("duration") val duration: Int
+)
+
+// Module Model for LearningModuleScreen
+data class Module(
+    @SerializedName("id") val id: Int,
+    @SerializedName("name") val name: String,
+    @SerializedName("description") val description: String,
+    @SerializedName("isCompleted") val isCompleted: Boolean = false,
+    @SerializedName("isLocked") val isLocked: Boolean = false
+)
+
+// LessonDetails Model for LessonScreen
+data class LessonDetails(
+    @SerializedName("id") val id: Int,
+    @SerializedName("name") val name: String,
+    @SerializedName("description") val description: String,
+    @SerializedName("content") val content: String,
+    @SerializedName("durationMinutes") val durationMinutes: Int,
+    @SerializedName("isCompleted") val isCompleted: Boolean = false
 )
 
 data class VideoRequest(
@@ -143,17 +166,17 @@ data class CertificateData(
     @SerializedName("issueDate") val issueDate: String
 )
 
-// Progress Requests & Responses
+// Progress Requests & Responses - FIXED: Made currentLevelId nullable
 data class ProgressResponse(
-    @SerializedName("completedLevels") val completedLevels: List<String>,
-    @SerializedName("currentLevelId") val currentLevelId: String,
-    @SerializedName("certifications") val certifications: List<Certification>
+    @SerializedName("completedLevels") val completedLevels: List<String> = emptyList(),
+    @SerializedName("currentLevelId") val currentLevelId: String? = null,
+    @SerializedName("certifications") val certifications: List<Certification> = emptyList()
 )
 
 data class UserProgress(
-    @SerializedName("completedLevels") val completedLevels: List<String>,
-    @SerializedName("currentLevelId") val currentLevelId: String,
-    @SerializedName("certifications") val certifications: List<Certification>
+    @SerializedName("completedLevels") val completedLevels: List<String> = emptyList(),
+    @SerializedName("currentLevelId") val currentLevelId: String? = null,
+    @SerializedName("certifications") val certifications: List<Certification> = emptyList()
 )
 
 data class Certification(

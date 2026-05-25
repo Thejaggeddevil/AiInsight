@@ -1,5 +1,6 @@
 package com.mansi.aiinsight.data.api
 
+import com.google.gson.annotations.SerializedName
 import com.mansi.aiinsight.data.model.*
 import retrofit2.Response
 import retrofit2.http.*
@@ -25,6 +26,17 @@ interface ApiService {
 
     @POST("store-video")
     suspend fun storeVideo(@Body request: VideoRequest): Response<VideoResponse>
+
+    // Module endpoints
+    @GET("modules/{courseId}")
+    suspend fun getModules(@Path("courseId") courseId: Int): Response<List<Module>>
+
+    // Lesson endpoints
+    @GET("lessons/{lessonId}")
+    suspend fun getLessonDetails(@Path("lessonId") lessonId: Int): Response<LessonDetails>
+
+    @POST("lessons/{lessonId}/complete")
+    suspend fun markLessonComplete(@Path("lessonId") lessonId: Int): Response<Void>
 
     // Payment endpoints
     @POST("test-razorpay")
@@ -60,7 +72,13 @@ interface ApiService {
     // Admin endpoints
     @GET("admin-status")
     suspend fun getAdminStatus(): Response<AdminStatusResponse>
+    @GET("/api/modules/{courseId}")
+    suspend fun getModulesByCourse(@Path("courseId") courseId: Int): ModulesResponse
 
+    data class ModulesResponse(
+        @SerializedName("success") val success: Boolean,
+        @SerializedName("modules") val modules: List<Module>
+    )
     // OTP endpoints
     @POST("send-mobile-otp")
     suspend fun sendMobileOtp(@Body request: MobileOtpRequest): Response<OtpResponse>

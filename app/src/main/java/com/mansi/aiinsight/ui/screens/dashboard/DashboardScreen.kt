@@ -22,9 +22,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.mansi.aiinsight.data.model.Certification
-import com.mansi.aiinsight.data.model.UserProgress
+import com.mansi.aiinsight.data.model.Course
 import com.mansi.aiinsight.data.repository.*
 import kotlinx.coroutines.launch
+
+// Data class for dashboard aggregation
+data class DashboardData(
+    val user: DashboardUser,
+    val courses: List<Course>,
+    val progress: UserProgressData
+)
+
+data class DashboardUser(
+    val fullName: String,
+    val email: String
+)
+
+data class UserProgressData(
+    val completedLessonsCount: Int,
+    val certifications: List<Certification>
+)
 
 @Composable
 fun DashboardScreen(
@@ -33,30 +50,104 @@ fun DashboardScreen(
     certificateRepository: CertificateRepository,
     progressRepository: ProgressRepository
 ) {
-    var progressData by remember { mutableStateOf<UserProgress?>(null) }
+    var dashboardData by remember { mutableStateOf<DashboardData?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf("") }
+    var refreshTrigger by remember { mutableStateOf(0) }
 
     val scope = rememberCoroutineScope()
     val user = authRepository.getUser()
 
-    LaunchedEffect(Unit) {
+    // Function to refresh dashboard
+    fun refreshDashboard() {
+        isLoading = true
+        errorMessage = ""
         scope.launch {
-            val result = progressRepository.getProgress()
-            result.onSuccess {
-                progressData = it
-                isLoading = false
-            }
-            result.onFailure {
-                errorMessage = it.message ?: "Failed to load progress"
+            try {
+                val progressResult = progressRepository.getProgress()
+                progressResult.onSuccess { progress ->
+                    try {
+                        // Safe navigation with null checks
+                        val completedLevels = progress?.completedLevels ?: emptyList()
+                        val certs = progress?.certifications ?: emptyList()
+                        val userName = user?.fullName ?: "Learner"
+                        val userEmail = user?.email ?: ""
+
+                        val dashData = DashboardData(
+                            user = DashboardUser(
+                                fullName = userName,
+                                email = userEmail
+                            ),
+                            courses = emptyList(),
+                            progress = UserProgressData(
+                                completedLessonsCount = completedLevels.size,
+                                certifications = certs
+                            )
+                        )
+                        dashboardData = dashData
+                        isLoading = false
+                        errorMessage = ""
+                    } catch (e: Exception) {
+                        // Fallback with empty data
+                        val dashData = DashboardData(
+                            user = DashboardUser(
+                                fullName = user?.fullName ?: "Learner",
+                                email = user?.email ?: ""
+                            ),
+                            courses = emptyList(),
+                            progress = UserProgressData(
+                                completedLessonsCount = 0,
+                                certifications = emptyList()
+                            )
+                        )
+                        dashboardData = dashData
+                        isLoading = false
+                    }
+                }
+                progressResult.onFailure { exception ->
+                    // Fallback data on error
+                    val dashData = DashboardData(
+                        user = DashboardUser(
+                            fullName = user?.fullName ?: "Learner",
+                            email = user?.email ?: ""
+                        ),
+                        courses = emptyList(),
+                        progress = UserProgressData(
+                            completedLessonsCount = 0,
+                            certifications = emptyList()
+                        )
+                    )
+                    dashboardData = dashData
+                    errorMessage = exception.message ?: "Failed to load progress"
+                    isLoading = false
+                }
+            } catch (e: Exception) {
+                // Fallback data on exception
+                val dashData = DashboardData(
+                    user = DashboardUser(
+                        fullName = user?.fullName ?: "Learner",
+                        email = user?.email ?: ""
+                    ),
+                    courses = emptyList(),
+                    progress = UserProgressData(
+                        completedLessonsCount = 0,
+                        certifications = emptyList()
+                    )
+                )
+                dashboardData = dashData
+                errorMessage = e.message ?: "Failed to load dashboard"
                 isLoading = false
             }
         }
     }
 
-    val completedLevels = progressData?.completedLevels ?: emptyList()
-    val certs = progressData?.certifications ?: emptyList()
-    val isBeginnerDone = completedLevels.contains("beginner")
+    // Initial load
+    LaunchedEffect(refreshTrigger) {
+        refreshDashboard()
+    }
+
+    val certifications = dashboardData?.progress?.certifications ?: emptyList()
+    val completedLessonsCount = dashboardData?.progress?.completedLessonsCount ?: 0
 
     Column(
         modifier = Modifier
@@ -95,10 +186,11 @@ fun DashboardScreen(
                         letterSpacing = 1.sp
                     )
                     Text(
-                        text = user?.fullName ?: "Learner",
+                        text = dashboardData?.user?.fullName ?: user?.fullName ?: "Learner",
                         color = Color.White,
                         fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
                     )
                 }
 
@@ -136,17 +228,19 @@ fun DashboardScreen(
                 fontSize = 14.sp
             )
             Text(
-                text = user?.fullName ?: "Learner",
+                text = dashboardData?.user?.fullName ?: user?.fullName ?: "Learner",
                 color = Color.White,
                 fontSize = 28.sp,
-                fontWeight = FontWeight.Black
+                fontWeight = FontWeight.Black,
+                maxLines = 1
             )
         }
 
         Spacer(modifier = Modifier.height(28.dp))
 
-        // ── LOADING / ERROR ──
+        // ── CONTENT SECTION ──
         if (isLoading) {
+            // LOADING STATE
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -155,315 +249,273 @@ fun DashboardScreen(
             ) {
                 CircularProgressIndicator(color = Color.White)
             }
-        } else if (errorMessage.isNotEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp)
-                    .background(Color(0xFF1A0000), RoundedCornerShape(12.dp))
-                    .border(0.5.dp, Color.Red.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                    .padding(16.dp)
-            ) {
-                Text(
-                    text = errorMessage,
-                    color = Color(0xFFFF6B6B),
-                    fontSize = 13.sp
-                )
-            }
-        }
-
-        // ── COURSE LEVELS ──
-        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-
-            Box(
-                modifier = Modifier
-                    .background(Color(0xFF121212), RoundedCornerShape(16.dp))
-                    .border(0.5.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
-                    .padding(horizontal = 20.dp, vertical = 14.dp)
-            ) {
-                Text(
-                    text = "YOUR COURSES",
-                    color = Color.White,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 16.sp,
-                    letterSpacing = 1.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Beginner
-            CourseCard(
-                number = "01",
-                title = "Beginner",
-                description = "Learn the foundations of prompt engineering. Master basic techniques to communicate effectively with AI.",
-                tag = "FREE",
-                tagColor = Color(0xFF166534),
-                tagTextColor = Color(0xFF4ADE80),
-                isCompleted = isBeginnerDone,
-                isUnlocked = true,
-                onStart = { navController.navigate("courseLearning/beginner") }
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Intermediate
-            CourseCard(
-                number = "02",
-                title = "Intermediate",
-                description = "Master domain-specific prompting for Business, Marketing, Healthcare, Education and more.",
-                tag = "PAID",
-                tagColor = Color(0xFF1E3A5F),
-                tagTextColor = Color(0xFF60A5FA),
-                isCompleted = false,
-                isUnlocked = isBeginnerDone,
-                onStart = { navController.navigate("courseLearning/intermediate") }
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Advanced
-            CourseCard(
-                number = "03",
-                title = "Advanced",
-                description = "Expert level prompt engineering techniques for professionals and power users.",
-                tag = "PAID",
-                tagColor = Color(0xFF1E3A5F),
-                tagTextColor = Color(0xFF60A5FA),
-                isCompleted = false,
-                isUnlocked = false,
-                onStart = { navController.navigate("courseLearning/advanced") }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(36.dp))
-
-        // ── CERTIFICATIONS ──
-        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-
-            Box(
-                modifier = Modifier
-                    .background(Color(0xFF121212), RoundedCornerShape(16.dp))
-                    .border(0.5.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
-                    .padding(horizontal = 20.dp, vertical = 14.dp)
-            ) {
-                Text(
-                    text = "COMPLETED CERTIFICATIONS (${certs.size})",
-                    color = Color.White,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 16.sp,
-                    letterSpacing = 1.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (certs.isEmpty()) {
+        } else {
+            // ── ERROR MESSAGE (if any) ──
+            if (errorMessage.isNotEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF0A0A0A), RoundedCornerShape(20.dp))
-                        .border(0.5.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(20.dp))
-                        .padding(40.dp),
-                    contentAlignment = Alignment.Center
+                        .padding(20.dp)
+                        .background(Color(0xFF1A0000), RoundedCornerShape(12.dp))
+                        .border(0.5.dp, Color.Red.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                        .padding(16.dp)
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(
-                            modifier = Modifier
-                                .size(80.dp)
-                                .background(
-                                    Color.White.copy(alpha = 0.05f),
-                                    RoundedCornerShape(24.dp)
-                                ),
-                            contentAlignment = Alignment.Center
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = errorMessage,
+                            color = Color(0xFFFF6B6B),
+                            fontSize = 13.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(
+                            onClick = { refreshTrigger++ },
+                            modifier = Modifier.size(24.dp)
                         ) {
                             Icon(
-                                Icons.Default.EmojiEvents,
-                                contentDescription = null,
-                                tint = Color.Gray,
-                                modifier = Modifier.size(40.dp)
+                                Icons.Default.Refresh,
+                                contentDescription = "Retry",
+                                tint = Color(0xFFFF6B6B),
+                                modifier = Modifier.size(18.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "No Certificates Yet",
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Complete levels to earn verifiable certificates",
-                            color = Color.Gray,
-                            fontSize = 13.sp,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 20.sp
-                        )
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Button(
-                            onClick = { navController.navigate("courseLearning/beginner") },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.White,
-                                contentColor = Color.Black
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(
-                                text = "Start Beginner Course →",
-                                fontWeight = FontWeight.Black
-                            )
-                        }
-                    }
-                }
-            } else {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    certs.forEach { cert ->
-                        CertCard(
-                            cert = cert,
-                            onClick = { navController.navigate("certificateDetail/${cert.id}") }
-                        )
                     }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(48.dp))
-
-        // ── FOOTER ──
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(0.5.dp, Color.White.copy(alpha = 0.08f))
-                .padding(vertical = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "© 2024 AIINSIGHT • Secure Learning Portal",
-                color = Color(0xFF444444),
-                fontSize = 11.sp,
-                letterSpacing = 1.sp
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Identity Verification Powered by DigiLocker Framework",
-                color = Color(0xFF333333),
-                fontSize = 10.sp
-            )
-        }
-    }
-}
-
-// ── COURSE CARD ──
-@Composable
-private fun CourseCard(
-    number: String,
-    title: String,
-    description: String,
-    tag: String,
-    tagColor: Color,
-    tagTextColor: Color,
-    isCompleted: Boolean,
-    isUnlocked: Boolean,
-    onStart: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0xFF0A0A0A), RoundedCornerShape(20.dp))
-            .border(
-                0.5.dp,
-                if (isCompleted) Color(0xFF166534).copy(alpha = 0.5f)
-                else Color.White.copy(alpha = 0.1f),
-                RoundedCornerShape(20.dp)
-            )
-            .padding(20.dp)
-    ) {
-        Column {
+            // ── STATS ROW ──
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 28.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .background(
-                                if (isCompleted) Color(0xFF166534).copy(alpha = 0.3f)
-                                else if (isUnlocked) Color.White.copy(alpha = 0.08f)
-                                else Color.White.copy(alpha = 0.03f),
-                                RoundedCornerShape(14.dp)
-                            )
-                            .border(
-                                0.5.dp,
-                                if (isCompleted) Color(0xFF4ADE80).copy(alpha = 0.3f)
-                                else Color.White.copy(alpha = 0.1f),
-                                RoundedCornerShape(14.dp)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (isCompleted) {
-                            Icon(
-                                Icons.Default.Check,
-                                contentDescription = null,
-                                tint = Color(0xFF4ADE80),
-                                modifier = Modifier.size(26.dp)
-                            )
-                        } else {
-                            Text(
-                                text = number,
-                                color = if (isUnlocked) Color.White else Color.Gray,
-                                fontWeight = FontWeight.Black,
-                                fontSize = 18.sp
-                            )
-                        }
-                    }
+                StatCard(
+                    number = certifications.size.toString(),
+                    label = "Certificates",
+                    modifier = Modifier.weight(1f)
+                )
+                StatCard(
+                    number = completedLessonsCount.toString(),
+                    label = "Lessons Complete",
+                    modifier = Modifier.weight(1f)
+                )
+            }
 
-                    Column {
-                        Text(
-                            text = title,
-                            color = if (isUnlocked || isCompleted) Color.White else Color.Gray,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Box(
-                            modifier = Modifier
-                                .background(tagColor, RoundedCornerShape(6.dp))
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = tag,
-                                color = tagTextColor,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
+            // ── CERTIFICATES SECTION ──
+            if (certifications.isNotEmpty()) {
+                Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                    Text(
+                        text = "Your Certificates",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        certifications.forEach { cert ->
+                            CertCard(
+                                cert = cert,
+                                onClick = {
+                                    if (cert.certId != null) {
+                                        navController.navigate("certificateDetail/${cert.certId}")
+                                    }
+                                }
                             )
                         }
                     }
                 }
 
-                if (!isUnlocked && !isCompleted) {
-                    Icon(
-                        Icons.Default.Lock,
-                        contentDescription = null,
-                        tint = Color.Gray,
-                        modifier = Modifier.size(20.dp)
+                Spacer(modifier = Modifier.height(48.dp))
+            } else {
+                // Empty certificates state
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No certificates yet. Start learning!",
+                        color = Color.Gray,
+                        fontSize = 14.sp
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            // ── COURSES SECTION ──
+            Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                Text(
+                    text = "Continue Learning",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
 
+                // Sample course cards
+                repeat(3) { index ->
+                    CourseCard(
+                        number = "${index + 1}",
+                        title = "Beginner Level",
+                        tag = "NEW",
+                        description = "Master the fundamentals and build a strong foundation",
+                        isCompleted = false,
+                        isUnlocked = index == 0,
+                        onStart = {
+                            navController.navigate("courseLearning/beginner/${index + 1}")
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+    }
+}
+
+@Composable
+fun StatCard(
+    number: String,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.height(100.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1a1a1a)),
+        border = CardDefaults.outlinedCardBorder()
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .border(0.5.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Text(
+                    text = number,
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 32.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = label,
+                    color = Color.Gray,
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun CourseCard(
+    number: String,
+    title: String,
+    tag: String,
+    description: String,
+    isCompleted: Boolean,
+    isUnlocked: Boolean,
+    onStart: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1a1a1a)),
+        border = CardDefaults.outlinedCardBorder()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Header with number and title
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(60.dp)
+                        .background(
+                            if (isCompleted) Color(0xFF166534).copy(alpha = 0.2f)
+                            else if (isUnlocked)
+                                Color.White.copy(alpha = 0.03f)
+                            else
+                                Color.White.copy(alpha = 0.03f),
+                            RoundedCornerShape(14.dp)
+                        )
+                        .border(
+                            0.5.dp,
+                            if (isCompleted) Color(0xFF4ADE80).copy(alpha = 0.3f)
+                            else Color.White.copy(alpha = 0.1f),
+                            RoundedCornerShape(14.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isCompleted) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            tint = Color(0xFF4ADE80),
+                            modifier = Modifier.size(26.dp)
+                        )
+                    } else {
+                        Text(
+                            text = number,
+                            color = if (isUnlocked) Color.White else Color.Gray,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 18.sp
+                        )
+                    }
+                }
+
+                Column {
+                    Text(
+                        text = title,
+                        color = if (isUnlocked || isCompleted) Color.White else Color.Gray,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFF7F6B2F), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = tag,
+                            color = Color(0xFFFFD700),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                }
+            }
+
+            // Description
             Text(
                 text = description,
                 color = Color.Gray,
@@ -471,8 +523,7 @@ private fun CourseCard(
                 lineHeight = 20.sp
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
-
+            // Footer with action button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
@@ -544,7 +595,6 @@ private fun CourseCard(
     }
 }
 
-// ── CERT CARD ──
 @Composable
 private fun CertCard(
     cert: Certification,

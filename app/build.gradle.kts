@@ -22,7 +22,7 @@ android {
             useSupportLibrary = true
         }
 
-        buildConfigField("String", "API_BASE_URL", "\"https://api.aiinsight.in/\"")
+        buildConfigField("String", "API_BASE_URL", "\"http://192.168.1.17:7000/\"")
     }
 
     buildTypes {
