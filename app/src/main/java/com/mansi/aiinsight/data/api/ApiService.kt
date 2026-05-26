@@ -31,6 +31,9 @@ interface ApiService {
     @GET("modules/{courseId}")
     suspend fun getModules(@Path("courseId") courseId: Int): Response<List<Module>>
 
+    @GET("courses/{courseId}/modules")
+    suspend fun getCourseModules(@Path("courseId") courseId: Int): Response<ModuleResponse>
+
     // Lesson endpoints
     @GET("lessons/{lessonId}")
     suspend fun getLessonDetails(@Path("lessonId") lessonId: Int): Response<LessonDetails>
@@ -72,13 +75,7 @@ interface ApiService {
     // Admin endpoints
     @GET("admin-status")
     suspend fun getAdminStatus(): Response<AdminStatusResponse>
-    @GET("/api/modules/{courseId}")
-    suspend fun getModulesByCourse(@Path("courseId") courseId: Int): ModulesResponse
 
-    data class ModulesResponse(
-        @SerializedName("success") val success: Boolean,
-        @SerializedName("modules") val modules: List<Module>
-    )
     // OTP endpoints
     @POST("send-mobile-otp")
     suspend fun sendMobileOtp(@Body request: MobileOtpRequest): Response<OtpResponse>

@@ -187,6 +187,10 @@ data class Certification(
     @SerializedName("certId") val certId: String? = null,
     @SerializedName("course") val course: String? = null
 )
+data class ModuleResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("modules") val modules: List<Module>
+)
 
 data class ProgressUpdateRequest(
     @SerializedName("currentLevelId") val currentLevelId: String,

@@ -24,12 +24,19 @@ class ModuleRepository(private val context: Context) {
             }
         }
     }
+
     suspend fun getModulesByCourse(courseId: Int): Result<List<Module>> {
-        return try {
-            val response = apiService.getModulesByCourse(courseId)
-            Result.success(response.modules)
-        } catch (e: Exception) {
-            Result.failure(e)
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = apiService.getCourseModules(courseId)
+                if (response.isSuccessful && response.body() != null) {
+                    Result.success(response.body()!!.modules)
+                } else {
+                    Result.failure(Exception("Failed to fetch course modules"))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
         }
     }
 }
